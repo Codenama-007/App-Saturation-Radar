@@ -1,0 +1,32 @@
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# Next.js / Node
+full-stack-app/node_modules/
+full-stack-app/.next/
+full-stack-app/out/
+full-stack-app/build/
+full-stack-app/.pnp
+full-stack-app/.pnp.*
+full-stack-app/.yarn/*
+!full-stack-app/.yarn/patches
+!full-stack-app/.yarn/plugins
+!full-stack-app/.yarn/releases
+!full-stack-app/.yarn/versions
+full-stack-app/*.tsbuildinfo
+full-stack-app/next-env.d.ts
+full-stack-app/.vercel
+full-stack-app/coverage/
+
+# Python
+ml_service/venv/
+ml_service/.venv/
+ml_service/__pycache__/
+*.py[cod]
+
+# editor / OS
+.vscode/
+.DS_Store
+*.pem
