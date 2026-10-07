@@ -24,6 +24,8 @@ full-stack-app/coverage/
 ml_service/venv/
 ml_service/.venv/
 ml_service/__pycache__/
+ml_service/trial_codes/
+ml_service/output.md
 *.py[cod]
 
 # editor / OS

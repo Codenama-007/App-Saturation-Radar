@@ -7,3 +7,4 @@ ddgs
 langgraph
 langchain
 langchain_ollama
+langchain-google-genai

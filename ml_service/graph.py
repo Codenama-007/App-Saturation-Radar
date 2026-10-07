@@ -1,7 +1,13 @@
+# --- PRODUCT HUNT DISABLED ---------------------------------------------------
+# Product Hunt's API has no real full-text search, so it returned trending
+# launches unrelated to the idea. Keep the import commented out for now.
+# from tools import Search_For_the_product, search_web_for_idea
+# -----------------------------------------------------------------------------
+import os
 import re
 from langgraph.graph import START, END, StateGraph
 from langchain_ollama import ChatOllama
-from tools import Search_For_the_product, search_web_for_idea
+from tools import search_web_for_idea
 from schemas import AppState
 from memory import find_similar_idea, save_idea
 from scoring import (
@@ -9,17 +15,54 @@ from scoring import (
     calculate_opportunity_score,
 )
 
-# LLM
+# LLM (Ollama only, fully local)
+# Pick any model shown by `ollama list`, e.g.:
+#   $env:OLLAMA_MODEL="llama3.1:8b"
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+
 llm = ChatOllama(
-    model="llama3.2:3b",
+    model=OLLAMA_MODEL,
     temperature=0,
+    # Ollama's default context window is small. Prompts here include web
+    # search results, so a larger window avoids silent truncation.
+    num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "8192")),
+    # Local models are slow. Give each call plenty of time.
+    client_kwargs={"timeout": float(os.getenv("OLLAMA_TIMEOUT", "300"))},
 )
 
+print(f"[llm] Ollama model: {OLLAMA_MODEL}")
+
+
 # HELPERS
-def strip_think(text: str) -> str:
+def content_to_text(content) -> str:
     """
-    Remove <think>...</think> blocks if the local model produces them.
+    Normalize LangChain message content to a plain string.
+
+    Newer Gemini models return a list of content blocks, e.g.
+    [{"type": "text", "text": "..."}], instead of a string.
+    Non-text blocks (thinking / reasoning) are skipped.
     """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+
+    return str(content)
+
+
+def strip_think(text) -> str:
+    """
+    Remove <think>...</think> blocks if the model produces them.
+    Accepts a string or LangChain content (list of blocks).
+    """
+    text = content_to_text(text)
 
     return re.sub(
         r"<think>.*?</think>",
@@ -29,26 +72,48 @@ def strip_think(text: str) -> str:
     ).strip()
 
 
-def extract_integer(text: str) -> int:
+def extract_integer(text) -> int:
     """
     Extract the first integer from an LLM response.
     """
-    match = re.search(r"\d+", text)
+    match = re.search(r"\d+", content_to_text(text))
 
     if not match:
         return 0
 
     return int(match.group())
 
+
+def count_direct_competitors(analysis: str) -> int:
+    """
+    Count numbered items under "DIRECT COMPETITORS:" directly from the text.
+    Small local models are unreliable at counting, so this avoids an LLM call.
+    """
+    m = re.search(
+        r"DIRECT COMPETITORS:?(.*?)(?:RELATED PRODUCTS|IRRELEVANT RESULTS|$)",
+        analysis,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
+    if not m:
+        return 0
+
+    section = m.group(1).strip()
+
+    if re.match(r"none\b", section, flags=re.IGNORECASE):
+        return 0
+
+    return len(
+        re.findall(r"^\s*\d+[.)]\s+\S", section, flags=re.MULTILINE)
+    )
+
+
 # CACHE
 def check_cache(state: AppState):
 
-    match, score = find_similar_idea(
-        state["idea"]
-    )
+    match, score = find_similar_idea(state["idea"])
 
     if match:
-
         print(
             f"[memory] Found a similar past idea "
             f"(similarity: {score:.0%}) — "
@@ -62,9 +127,7 @@ def check_cache(state: AppState):
             "from_cache": True,
         }
 
-    return {
-        "from_cache": False
-    }
+    return {"from_cache": False}
 
 
 def route_after_cache(state: AppState):
@@ -101,6 +164,7 @@ Generate a concise search query that would find products
 most directly related to this idea.
 
 Focus on the actual product category, problem and target user.
+Do not narrow the idea to a specific niche the user did not mention.
 
 Return ONLY the search query.
 Do not explain your answer.
@@ -108,13 +172,9 @@ Do not explain your answer.
 
     response = llm.invoke(prompt)
 
-    query = strip_think(
-        response.content
-    )
+    query = strip_think(response.content)
 
-    return {
-        "search_query": query
-    }
+    return {"search_query": query}
 
 
 # SEARCH
@@ -122,27 +182,18 @@ def search_products(state: AppState):
 
     query = state["search_query"]
 
-    print(
-        f"[research] Searching for: {query}"
-    )
+    print(f"[research] Searching for: {query}")
 
-    web_results = search_web_for_idea(
-        query
-    )
+    web_results = search_web_for_idea(query)
 
-    try:
-
-        products = Search_For_the_product(
-            query
-        )
-
-    except RuntimeError as e:
-
-        print(
-            f"[warning] Product Hunt search failed: {e}"
-        )
-
-        products = []
+    # --- PRODUCT HUNT DISABLED -----------------------------------------------
+    # try:
+    #     products = Search_For_the_product(query)
+    # except RuntimeError as e:
+    #     print(f"[warning] Product Hunt search failed: {e}")
+    #     products = []
+    products = []
+    # -------------------------------------------------------------------------
 
     return {
         "web_results": web_results,
@@ -153,6 +204,11 @@ def search_products(state: AppState):
 # COMPETITOR ANALYSIS
 def compare_products(state: AppState):
 
+    # --- PRODUCT HUNT DISABLED: removed the "Product Hunt results" block ------
+    # Product Hunt results:
+    # {state["products"]}
+    # -------------------------------------------------------------------------
+
     prompt = f"""
 You are a startup competition analyst.
 
@@ -161,9 +217,6 @@ User's startup idea:
 
 Web search results:
 {state["web_results"]}
-
-Product Hunt results:
-{state["products"]}
 
 Your task is to identify products that are genuinely
 competitive with the user's idea.
@@ -217,13 +270,9 @@ Do not invent competitors.
 
     result = llm.invoke(prompt)
 
-    analysis = strip_think(
-        result.content
-    )
+    analysis = strip_think(result.content)
 
-    return {
-        "result": analysis
-    }
+    return {"result": analysis}
 
 
 # SCORING
@@ -231,35 +280,14 @@ def calculate_scores(state: AppState):
 
     analysis = state["result"]
 
-    # Count direct competitors
-    competitor_prompt = f"""
-You are extracting structured information.
+    # Count direct competitors (parsed from text, no LLM call)
+    direct_competitors = count_direct_competitors(analysis)
 
-Competition analysis:
-{analysis}
+    # Count highly similar competitors (only worth asking if there are any)
+    high_similarity = 0
 
-Count ONLY the products listed under:
-
-DIRECT COMPETITORS:
-
-Do not count RELATED PRODUCTS.
-Do not count IRRELEVANT RESULTS.
-
-Return ONLY the integer count.
-"""
-
-    competitor_response = llm.invoke(
-        competitor_prompt
-    )
-
-    direct_competitors = extract_integer(
-        strip_think(
-            competitor_response.content
-        )
-    )
-
-    # Count highly similar competitors
-    similarity_prompt = f"""
+    if direct_competitors > 0:
+        similarity_prompt = f"""
 You are analyzing startup competition.
 
 Competition analysis:
@@ -274,31 +302,20 @@ core functionality and target use case.
 Return ONLY the integer count.
 """
 
-    similarity_response = llm.invoke(
-        similarity_prompt
-    )
+        similarity_response = llm.invoke(similarity_prompt)
 
-    high_similarity = extract_integer(
-        strip_think(
-            similarity_response.content
+        high_similarity = extract_integer(
+            strip_think(similarity_response.content)
         )
-    )
+
+        # A small model can over-count; never exceed the competitor total
+        high_similarity = min(high_similarity, direct_competitors)
 
     # Research result counts
-    web_results = state.get(
-        "web_results",
-        []
-    )
+    web_results = state.get("web_results", [])
+    products = state.get("products", [])  # empty while Product Hunt is disabled
 
-    products = state.get(
-        "products",
-        []
-    )
-
-    total_results = (
-        len(web_results)
-        + len(products)
-    )
+    total_results = len(web_results) + len(products)
 
     # Source coverage
     source_count = 0
@@ -318,9 +335,7 @@ Return ONLY the integer count.
     )
 
     # Opportunity score
-    scoring = calculate_opportunity_score(
-        scoring
-    )
+    scoring = calculate_opportunity_score(scoring)
 
     print(
         "\n[scoring]"
@@ -329,9 +344,7 @@ Return ONLY the integer count.
         f"\nVerdict: {scoring['build_verdict']}"
     )
 
-    return {
-        "scoring": scoring
-    }
+    return {"scoring": scoring}
 
 
 # GAP ANALYSIS / FEATURES
@@ -390,61 +403,27 @@ SUGGESTED DIFFERENTIATORS:
 3. <Feature> — addresses: <specific gap or pain point>
 """
 
-    response = llm.invoke(
-        prompt
-    )
+    response = llm.invoke(prompt)
 
-    features = strip_think(
-        response.content
-    )
+    features = strip_think(response.content)
 
-    return {
-        "features": features
-    }
+    return {"features": features}
 
 
 # LANGGRAPH
-workflow = StateGraph(
-    AppState
-)
-workflow.add_node(
-    "check_cache",
-    check_cache
-)
-workflow.add_node(
-    "generate_query",
-    generate_query
-)
-workflow.add_node(
-    "search_products",
-    search_products
-)
-workflow.add_node(
-    "compare_products",
-    compare_products
-)
-workflow.add_node(
-    "calculate_scores",
-    calculate_scores
-)
+workflow = StateGraph(AppState)
 
-workflow.add_node(
-    "suggest_features",
-    suggest_features
-)
-
-workflow.add_node(
-    "save_to_cache",
-    save_to_cache
-)
+workflow.add_node("check_cache", check_cache)
+workflow.add_node("generate_query", generate_query)
+workflow.add_node("search_products", search_products)
+workflow.add_node("compare_products", compare_products)
+workflow.add_node("calculate_scores", calculate_scores)
+workflow.add_node("suggest_features", suggest_features)
+workflow.add_node("save_to_cache", save_to_cache)
 
 
 # GRAPH EDGES
-workflow.add_edge(
-    START,
-    "check_cache"
-)
-
+workflow.add_edge(START, "check_cache")
 
 workflow.add_conditional_edges(
     "check_cache",
@@ -455,41 +434,12 @@ workflow.add_conditional_edges(
     },
 )
 
-
-workflow.add_edge(
-    "generate_query",
-    "search_products"
-)
-
-
-workflow.add_edge(
-    "search_products",
-    "compare_products"
-)
-
-
-workflow.add_edge(
-    "compare_products",
-    "calculate_scores"
-)
-
-
-workflow.add_edge(
-    "calculate_scores",
-    "suggest_features"
-)
-
-
-workflow.add_edge(
-    "suggest_features",
-    "save_to_cache"
-)
-
-
-workflow.add_edge(
-    "save_to_cache",
-    END
-)
+workflow.add_edge("generate_query", "search_products")
+workflow.add_edge("search_products", "compare_products")
+workflow.add_edge("compare_products", "calculate_scores")
+workflow.add_edge("calculate_scores", "suggest_features")
+workflow.add_edge("suggest_features", "save_to_cache")
+workflow.add_edge("save_to_cache", END)
 
 
 # COMPILE
@@ -499,21 +449,9 @@ graph = workflow.compile()
 # GRAPH VISUALIZATION
 if __name__ == "__main__":
 
-    png_data = (
-        graph
-        .get_graph()
-        .draw_mermaid_png()
-    )
+    png_data = graph.get_graph().draw_mermaid_png()
 
-    with open(
-        "langgraph_workflow.png",
-        "wb"
-    ) as f:
+    with open("langgraph_workflow.png", "wb") as f:
+        f.write(png_data)
 
-        f.write(
-            png_data
-        )
-
-    print(
-        "Graph image saved as langgraph_workflow.png"
-    )
+    print("Graph image saved as langgraph_workflow.png")

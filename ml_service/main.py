@@ -90,3 +90,11 @@ def demo_analysis(query : Query):
         "features": result["features"],
         "from_cache": result.get("from_cache", False),
     }
+    
+# Creating a health route 
+@app.get("/health")
+def poke():
+    return {
+        "status": "ok",
+        "message": "Saturation Radar API is alive"
+    }
