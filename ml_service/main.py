@@ -26,6 +26,7 @@ def home():
         "message" : "This is the actual home route "
     }
 
+# the main route for the radar saturation analysis
 @app.post("/radar")
 def app_saturation_radar(query : Query):
     result = graph.invoke(
@@ -65,6 +66,7 @@ def app_saturation_radar(query : Query):
         ),
     }
 
+# a demo route for testing the analysis without scoring
 @app.post("/demo_analyze")
 def demo_analysis(query : Query):
     print(f"[REQUEST] idea: {query.query}")
