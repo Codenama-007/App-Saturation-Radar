@@ -13,4 +13,6 @@ class AppState(TypedDict):
     web_results: List[Dict]    # from DuckDuckGo
     result: str                # total results from product hunt and DuckDuckGo
     features: str               # gap analysis + suggestions
+    scoring: Dict
     from_cache: bool
+    

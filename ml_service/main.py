@@ -26,6 +26,45 @@ def home():
         "message" : "This is the actual home route "
     }
 
+@app.post("/radar")
+def app_saturation_radar(query : Query):
+    result = graph.invoke(
+        {
+            "idea": query.query,
+            "search_query": "",
+            "products": [],
+            "web_results": [],
+            "result": "",
+            "features": "",
+            "scoring": {},
+            "from_cache": False,
+        }
+    )
+
+    return {
+        "idea": query.query,
+
+        "response": result.get(
+            "result",
+            ""
+        ),
+
+        "features": result.get(
+            "features",
+            ""
+        ),
+
+        "scoring": result.get(
+            "scoring",
+            {}
+        ),
+
+        "from_cache": result.get(
+            "from_cache",
+            False
+        ),
+    }
+
 @app.post("/demo_analyze")
 def demo_analysis(query : Query):
     print(f"[REQUEST] idea: {query.query}")
