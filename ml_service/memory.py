@@ -2,10 +2,16 @@ import os
 import sqlite3
 import difflib
 from datetime import datetime, timezone
+from pathlib import Path
 
-DB_DIR = os.path.expanduser("~/.app_saturation")
-DB_PATH = os.path.join(DB_DIR, "memory.db")
+# Run This programm on my laptop 
+# DB_DIR = os.path.expanduser("~/.app_saturation")
+# DB_PATH = os.path.join(DB_DIR, "memory.db")
 
+# Run this programm on the College Computer 
+DB_DIR = Path(__file__).resolve().parent / "data"
+DB_DIR.mkdir(parents=True, exist_ok=True)      # create the folder if missing
+DB_PATH = str(DB_DIR / "memory.db")
 
 def init_db():
     os.makedirs(DB_DIR, exist_ok=True)
@@ -61,3 +67,7 @@ def save_idea(idea: str, search_query: str, result: str, features: str):
     )
     conn.commit()
     conn.close()
+
+
+# I added the changes from the college compiuter 
+init_db()   # runs on import, so any machine that imports memory gets a ready database

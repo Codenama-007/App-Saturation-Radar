@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from schemas import Query 
+from schemas import Query , LoginUser , RegisterUser
 from dotenv import load_dotenv
-
 from graph import graph
 from memory import init_db
 
@@ -25,6 +24,25 @@ def home():
     return {
         "message" : "This is the actual home route "
     }
+
+# Creating the Login User Enadpoint
+@app.post("/login")
+def login(user : LoginUser):
+    print(user.email)
+    print(user.password)
+    return {
+        "message" : "The request reached the backend Successfully"
+    }
+
+# Creating the register endpoint 
+@app.post("/register")
+def register(user : RegisterUser):
+    print(user.username)
+    print(user.email)
+    print(user.password)
+    return {
+        "message" : "The request reached the backend Successfully"
+    } 
 
 # the main route for the radar saturation analysis
 @app.post("/radar")

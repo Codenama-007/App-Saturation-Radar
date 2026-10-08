@@ -9,6 +9,7 @@ full-stack-app/.next/
 full-stack-app/out/
 full-stack-app/build/
 full-stack-app/.pnp
+full-stack-app/.env.local
 full-stack-app/.pnp.*
 full-stack-app/.yarn/*
 !full-stack-app/.yarn/patches

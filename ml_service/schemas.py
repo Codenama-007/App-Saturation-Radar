@@ -1,5 +1,6 @@
-from pydantic import BaseModel 
+from pydantic import BaseModel , EmailStr
 from typing import List , Dict , TypedDict 
+
 
 
 class Query(BaseModel):
@@ -16,3 +17,11 @@ class AppState(TypedDict):
     scoring: Dict
     from_cache: bool
     
+class LoginUser(BaseModel):
+    email : EmailStr
+    password : str
+
+class RegisterUser(BaseModel):
+    username : str
+    email : EmailStr
+    password : str
