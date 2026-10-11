@@ -1,5 +1,5 @@
 "use client"
-
+import { apiFetch } from '@/lib/api'
 import React, { useState } from 'react'
 import { SidebarTrigger } from './ui/sidebar'
 import { Input } from './ui/input'
@@ -37,11 +37,12 @@ const ChatComponent = () => {
         setMessage("")
 
         try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/radar`, {
+            const response = await apiFetch('/radar', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: currentMessage }),
             })
+
+            if (!response.ok) throw new Error(`Request failed: ${response.status}`)
 
             const data = await response.json()
 

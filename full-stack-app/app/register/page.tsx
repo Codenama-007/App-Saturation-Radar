@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const theme = {
   page: "relative min-h-screen flex flex-col items-center justify-center px-4 md:px-8 bg-background text-foreground dot-grid",
@@ -10,10 +11,12 @@ const theme = {
   title: "text-2xl text-foreground text-center",
   subtitle: "mt-2 text-sm text-center text-muted-foreground",
   label: "mb-2 inline-block text-sm font-medium text-foreground",
+  hint: "mt-1.5 text-xs text-muted-foreground",
   input:
     "w-full rounded-md border border-border bg-[var(--surface-2)] px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30",
   button:
-    "btn-primary w-full justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+  error: "text-sm text-[var(--danger)]",
   footerText: "mt-6 text-sm text-center text-muted-foreground",
   link: "font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded",
 };
@@ -30,6 +33,10 @@ type Field = {
   type: string;
   placeholder: string;
   autoComplete: string;
+  hint?: string;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
 };
 
 // One entry per input, so adding or removing a field is a one-line change
@@ -40,6 +47,10 @@ const fields: Field[] = [
     type: "text",
     placeholder: "john_doe",
     autoComplete: "username",
+    hint: "3-30 characters: letters, numbers and underscores",
+    minLength: 3,
+    maxLength: 30,
+    pattern: "[A-Za-z0-9_]+",
   },
   {
     id: "email",
@@ -54,15 +65,21 @@ const fields: Field[] = [
     type: "password",
     placeholder: "••••••••",
     autoComplete: "new-password",
+    hint: "At least 8 characters",
+    minLength: 8,
+    maxLength: 72,
   },
 ];
 
 export default function Page() {
+  const router = useRouter();
   const [form, setForm] = useState<SignupData>({
     username: "",
     email: "",
     password: "",
   });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Update the field that was typed in
   function handleChange(e: ChangeEvent<HTMLInputElement>) {
@@ -72,6 +89,9 @@ export default function Page() {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+
     try {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/register`, {
         method: "POST",
@@ -79,13 +99,18 @@ export default function Page() {
         body: JSON.stringify(form), // { username, email, password }
       });
       const data = await res.json();
+
       if (!res.ok) {
-        console.error("Signup failed:", res.status, data); // a 422 lists the bad field in data.detail
+        // 409 sends a string, 422 sends a list of field errors
+        setError(typeof data.detail === "string" ? data.detail : "Please check your details");
         return;
       }
-      console.log("Signup success:", data);
-    } catch (err) {
-      console.error("Network error:", err);
+
+      router.push("/login");
+    } catch {
+      setError("Could not reach the server");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -110,16 +135,26 @@ export default function Page() {
                   type={f.type}
                   placeholder={f.placeholder}
                   autoComplete={f.autoComplete}
+                  minLength={f.minLength}
+                  maxLength={f.maxLength}
+                  pattern={f.pattern}
                   value={form[f.id]}
                   onChange={handleChange}
                   required
                   className={theme.input}
                 />
+                {f.hint && <p className={theme.hint}>{f.hint}</p>}
               </div>
             ))}
 
-            <button type="submit" className={theme.button}>
-              Create account
+            {error && (
+              <p role="alert" className={theme.error}>
+                {error}
+              </p>
+            )}
+
+            <button type="submit" disabled={loading} className={theme.button}>
+              {loading ? "Creating account..." : "Create account"}
             </button>
           </form>
 

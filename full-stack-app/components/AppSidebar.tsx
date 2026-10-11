@@ -1,5 +1,7 @@
 "use client"
 
+import { useRouter } from 'next/navigation'
+import { clearSession } from '@/lib/token'
 import React from 'react'
 import Link from 'next/link';
 import {
@@ -8,8 +10,8 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarRail,
-  SidebarMenuButton ,
-  SidebarMenuItem , 
+  SidebarMenuButton,
+  SidebarMenuItem,
   SidebarMenu
 } from '@/components/ui/sidebar';
 import { LogOut, LogOutIcon } from 'lucide-react';
@@ -17,8 +19,16 @@ import { UserIcon } from 'lucide-react'
 import { Plus } from 'lucide-react';
 
 const AppSidebar = () => {
+  const router = useRouter()
+
+  // clear the saved token and go back to the login page
+  const handleLogout = () => {
+    clearSession()
+    router.push('/login')
+  }
+
   return (
-      <Sidebar className="border-r border-[#252932] bg-[#08090B] ">
+    <Sidebar className="border-r border-[#252932] bg-[#08090B] ">
       {/* Header — logo, same as Navbar */}
       <SidebarHeader className="border-b border-[#252932] px-4 py-4">
         <Link
@@ -54,7 +64,7 @@ const AppSidebar = () => {
       </SidebarHeader>
 
       {/* Middle section — demo project notice */}
-       <SidebarContent className="px-2 py-4">
+      <SidebarContent className="px-2 py-4">
 
         <SidebarMenu>
           <SidebarMenuItem>
@@ -85,7 +95,7 @@ const AppSidebar = () => {
       <SidebarFooter className="border-t border-[#252932] px-4 py-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 rounded-full bg-[#111318] border border-[#252932] flex items-center justify-center text-xs font-semibold text-[#B8F500]">
-            <UserIcon/> 
+            <UserIcon />
           </div>
           <div className="flex flex-col">
             <span className="text-sm text-[#F5F7FA] leading-none">Affan Shah</span>
@@ -94,8 +104,8 @@ const AppSidebar = () => {
         </div>
 
         <Link href="/register" className="block w-full">
-          <button className="btn-primary w-full text-xs py-2.5 px-4 flex items-center justify-center gap-1.5">
-            <LogOut/>
+          <button onClick={handleLogout} className="btn-primary w-full text-xs py-2.5 px-4 flex items-center justify-center gap-1.5">
+            <LogOut />
             Logout
             {/* <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path

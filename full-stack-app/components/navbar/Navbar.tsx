@@ -95,7 +95,7 @@ export function Navbar() {
           </a>
           <Link href={'/register'}>
             <button className='ml-4 shadow-accent p-2 rounded-md bg-[#111318] text-white hover:border-[#B8F500]-950'>
-              Sign In
+              Sign Up
             </button>
           </Link>
         </div>
@@ -135,7 +135,7 @@ export function Navbar() {
           </a>
           <Link href={'/register'}>
             <button className='bg-[#111318] text-white'>
-              Sign In
+              Sign Up
             </button>
           </Link>
 
