@@ -9,3 +9,7 @@ langchain
 langchain_ollama
 langchain-google-genai
 email-validator
+sqlalchemy
+psycopg[binary]
+bcrypt
+pyjwt

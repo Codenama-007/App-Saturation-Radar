@@ -1,5 +1,5 @@
-from pydantic import BaseModel , EmailStr
-from typing import List , Dict , TypedDict 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from typing import List, Dict, TypedDict
 
 
 
@@ -18,10 +18,43 @@ class AppState(TypedDict):
     from_cache: bool
     
 class LoginUser(BaseModel):
-    email : EmailStr
-    password : str
-
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+ 
+    @field_validator("email")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
+ 
+ 
 class RegisterUser(BaseModel):
-    username : str
-    email : EmailStr
-    password : str
+    username: str = Field(pattern=r"^[A-Za-z0-9_]{3,30}$")
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=72)
+ 
+    @field_validator("email")
+    @classmethod
+    def lowercase_email(cls, value: str) -> str:
+        return value.lower()
+ 
+    @field_validator("password")
+    @classmethod
+    def fits_bcrypt(cls, value: str) -> str:
+        # bcrypt only reads the first 72 bytes
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("Password must be at most 72 bytes")
+        return value
+ 
+ 
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+ 
+    id: int
+    username: str
+    email: str
+ 
+ 
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
