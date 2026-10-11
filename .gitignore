@@ -29,6 +29,8 @@ ml_service/trial_codes/
 ml_service/output.md
 *.py[cod]
 
+uml-diagram-prompt.md
+
 # editor / OS
 .vscode/
 .DS_Store
