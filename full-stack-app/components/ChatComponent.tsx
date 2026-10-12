@@ -1,74 +1,108 @@
 "use client"
 import { apiFetch } from '@/lib/api'
-import React, { useState } from 'react'
+import { readEvents } from '@/lib/stream'
+import type { Scoring } from '@/lib/stream'
+import React, { useEffect, useRef, useState } from 'react'
 import { SidebarTrigger } from './ui/sidebar'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import MarketValidation from './MarketValidation'
+import { SystemLoader } from './SystemLoader'
+// import { ButtonSpinner } from './ButtonSpinner'
 
 interface Turn {
     question: string
     response: string
     features: string
-    scoring: {
-        opportunity_score?: number
-        verdict?: string
-        opportunity_verdict?: string
-        competition_density?: number
-        similarity_score?: number
-        market_gap_score?: number
-        confidence_score?: number
-        relevant_competitors?: number
-        high_similarity_competitors?: number
-    }
+    scoring?: Scoring
+    streaming: boolean
+    step: string
+}
+
+// what is happening after each pipeline step finishes
+const STEP_LABELS: Record<string, string> = {
+    start: "Checking past results...",
+    check_cache: "Generating a search query...",
+    generate_query: "Searching the web...",
+    search_products: "Analyzing competitors...",
+    compare_products: "Scoring the market...",
+    calculate_scores: "Writing differentiators...",
 }
 
 const ChatComponent = () => {
     const [Message, setMessage] = useState("")
     const [messages, setMessages] = useState<Turn[]>([])
+    const [streaming, setStreaming] = useState(false)
+    const scrollRef = useRef<HTMLElement>(null)
+
+    // keep following the new text, unless the user scrolled up to read
+    useEffect(() => {
+        const el = scrollRef.current
+        if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+            el.scrollTop = el.scrollHeight
+        }
+    }, [messages])
+
+    // update the newest turn as events arrive
+    const updateLast = (change: (turn: Turn) => Turn) =>
+        setMessages((prev) => prev.map((t, i) => (i === prev.length - 1 ? change(t) : t)))
 
     const handleAnalyze = async () => {
-        const currentMessage = Message
+        const question = Message
 
-        if (!currentMessage.trim()) return
+        // ignore empty input and clicks while a request is running
+        if (!question.trim() || streaming) return
 
         setMessage("")
+        setStreaming(true)
+        setMessages((prev) => [
+            ...prev,
+            { question, response: "", features: "", streaming: true, step: STEP_LABELS.start },
+        ])
+
+        // jump to the new question once it has rendered
+        requestAnimationFrame(() => {
+            const el = scrollRef.current
+            if (el) el.scrollTop = el.scrollHeight
+        })
 
         try {
-            const response = await apiFetch('/radar', {
+            const response = await apiFetch('/radar/stream', {
                 method: 'POST',
-                body: JSON.stringify({ query: currentMessage }),
+                body: JSON.stringify({ query: question }),
             })
 
             if (!response.ok) throw new Error(`Request failed: ${response.status}`)
 
-            const data = await response.json()
-
-            setMessages((prev) => [
-                ...prev,
-                {
-                    question: currentMessage,
-                    response: data.response || "",
-                    features: data.features || "",
-                    scoring: data.scoring || {},
-                },
-            ])
-
-            console.log(data)
+            await readEvents(response, (event) => {
+                if (event.type === "step") {
+                    updateLast((t) => ({ ...t, step: STEP_LABELS[event.node] ?? t.step }))
+                } else if (event.type === "token") {
+                    updateLast((t) => ({ ...t, [event.field]: t[event.field] + event.text }))
+                } else if (event.type === "text") {
+                    // the finished text replaces what was streamed
+                    updateLast((t) => ({ ...t, [event.field]: event.text }))
+                } else if (event.type === "scoring") {
+                    updateLast((t) => ({ ...t, scoring: event.data }))
+                } else if (event.type === "error") {
+                    updateLast((t) => ({
+                        ...t,
+                        response: t.response ? `${t.response}\n\n${event.detail}` : event.detail,
+                    }))
+                }
+            })
         } catch (error) {
             console.log(error)
 
-            setMessages((prev) => [
-                ...prev,
-                {
-                    question: currentMessage,
-                    response: "Something went wrong while connecting to the backend.",
-                    features: "",
-                    scoring: {},
-                },
-            ])
+            updateLast((t) => ({
+                ...t,
+                response: "Something went wrong while connecting to the backend.",
+            }))
+        } finally {
+            updateLast((t) => ({ ...t, streaming: false }))
+            setStreaming(false)
         }
     }
 
@@ -99,7 +133,7 @@ const ChatComponent = () => {
 
             </header>
 
-            <section className="flex-1 space-y-6 overflow-y-scroll px-6 py-8">
+            <section ref={scrollRef} className="flex-1 space-y-6 overflow-y-scroll px-6 py-8">
                 {messages.map((turn, idx) => (
                     <React.Fragment key={idx}>
                         <div className="flex justify-end">
@@ -109,13 +143,25 @@ const ChatComponent = () => {
                         </div>
 
                         <div className="flex justify-start">
-                            <div className="max-w-xl rounded-lg border border-[#30363d] bg-[#161b22] px-4 py-3 text-sm leading-relaxed text-[#f0f6fc] space-y-3">
+                            <div
+                                className={`max-w-xl rounded-lg border border-[#30363d] bg-[#161b22] px-4 py-3 text-sm leading-relaxed text-[#f0f6fc] space-y-3 ${
+                                    turn.streaming && !turn.response ? "w-full" : ""
+                                }`}
+                            >
 
-                                <div className="prose prose-invert prose-sm max-w-none">
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                        {turn.response}
-                                    </ReactMarkdown>
-                                </div>
+                                {turn.streaming && !turn.response && (
+                                    <div className="overflow-hidden rounded-lg">
+                                        <SystemLoader label="ANALYZING MARKET" sublabel={turn.step} />
+                                    </div>
+                                )}
+
+                                {turn.response && (
+                                    <div className="prose prose-invert prose-sm max-w-none">
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                            {turn.response}
+                                        </ReactMarkdown>
+                                    </div>
+                                )}
 
                                 {turn.features && (
                                     <div className="border-t border-[#30363d] pt-3 prose prose-invert prose-sm max-w-none">
@@ -127,6 +173,13 @@ const ChatComponent = () => {
 
                                 {turn.scoring && (
                                     <MarketValidation scoring={turn.scoring} />
+                                )}
+
+                                {turn.streaming && turn.response && (
+                                    <p className="flex items-center gap-2 text-xs text-[#8b949e]">
+                                        <SystemLoader />
+                                        {turn.step}
+                                    </p>
                                 )}
 
                             </div>
@@ -153,6 +206,7 @@ const ChatComponent = () => {
                             shadow-none
                         "
                         value={Message}
+                        disabled={streaming}
                         onChange={(e) => {
                             setMessage(e.target.value)
                         }}
@@ -169,9 +223,11 @@ const ChatComponent = () => {
                             hover:bg-[#a3d900]
                             font-medium
                         "
+                        disabled={streaming}
                         onClick={handleAnalyze}
                     >
-                        Analyze
+                        {streaming ? "Wauit " : null}
+                        {streaming ? "Analyzing..." : "Analyze"}
                     </Button>
 
                 </div>

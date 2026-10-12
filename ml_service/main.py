@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from security import (
 )
 from graph import graph
 from memory import init_db
+from streaming import stream_radar
  
 load_dotenv()
 
@@ -126,9 +128,12 @@ def register(user: RegisterUser, db: Session = Depends(get_db)):
 def me(current_user: User = Depends(get_current_user)):
     return current_user
 
-# the main route for the radar saturation analysis
+# the main route for the radar saturation analysis (login required)
 @app.post("/radar")
-def app_saturation_radar(query : Query):
+def app_saturation_radar(
+    query : Query,
+    current_user: User = Depends(get_current_user),
+):
     result = graph.invoke(
         {
             "idea": query.query,
@@ -166,8 +171,18 @@ def app_saturation_radar(query : Query):
         ),
     }
 
+# same analysis as /radar, streamed as newline-delimited JSON (login required)
+@app.post("/radar/stream")
+def app_saturation_radar_stream(
+    query : Query,
+    current_user: User = Depends(get_current_user),
+):
+    return StreamingResponse(
+        stream_radar(query.query),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
-    
 # Creating a health route 
 @app.get("/health")
 def poke():
