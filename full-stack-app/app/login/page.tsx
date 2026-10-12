@@ -1,5 +1,5 @@
 "use client";
-import { SystemLoader } from "@/components/SystemLoader";
+import { ButtonSpinner } from "@/components/ButtonSpinner";
 import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
@@ -136,7 +136,7 @@ export default function LoginForm() {
             )}
 
             <button type="submit" disabled={loading} className={theme.button}>
-              {loading ? <SystemLoader/> : "Sign in"}
+              {loading ? <ButtonSpinner/> : "Sign in"}
             </button>
           </form>
 

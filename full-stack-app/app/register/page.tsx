@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ButtonSpinner } from "@/components/ButtonSpinner";
 
 const theme = {
   page: "relative min-h-screen flex flex-col items-center justify-center px-4 md:px-8 bg-background text-foreground dot-grid",
@@ -154,7 +155,7 @@ export default function Page() {
             )}
 
             <button type="submit" disabled={loading} className={theme.button}>
-              {loading ? "Creating account..." : "Create account"}
+              {loading ? <ButtonSpinner/> : "Create account"}
             </button>
           </form>
 

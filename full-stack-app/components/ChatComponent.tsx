@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import MarketValidation from './MarketValidation'
 import { SystemLoader } from './SystemLoader'
-// import { ButtonSpinner } from './ButtonSpinner'
+import { ButtonSpinner } from './ButtonSpinner'
 
 interface Turn {
     question: string
@@ -177,7 +177,7 @@ const ChatComponent = () => {
 
                                 {turn.streaming && turn.response && (
                                     <p className="flex items-center gap-2 text-xs text-[#8b949e]">
-                                        <SystemLoader />
+                                        <ButtonSpinner />
                                         {turn.step}
                                     </p>
                                 )}
@@ -226,7 +226,7 @@ const ChatComponent = () => {
                         disabled={streaming}
                         onClick={handleAnalyze}
                     >
-                        {streaming ? "Wauit " : null}
+                        {streaming ? <ButtonSpinner /> : null}
                         {streaming ? "Analyzing..." : "Analyze"}
                     </Button>
 
