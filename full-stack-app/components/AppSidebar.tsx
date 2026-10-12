@@ -1,7 +1,9 @@
 "use client"
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { clearSession } from '@/lib/token'
+import { clearSession, getUser } from '@/lib/token'
+import type { AuthUser } from '@/lib/token'
 import React from 'react'
 import Link from 'next/link';
 import {
@@ -19,6 +21,8 @@ import { UserIcon } from 'lucide-react'
 import { Plus } from 'lucide-react';
 
 const AppSidebar = () => {
+  // the sidebar only renders in the browser, so localStorage is safe to read here
+  const [user] = useState<AuthUser | null>(getUser)
   const router = useRouter()
 
   // clear the saved token and go back to the login page
@@ -94,12 +98,16 @@ const AppSidebar = () => {
       {/* Footer — demo user + sign up */}
       <SidebarFooter className="border-t border-[#252932] px-4 py-4">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-[#111318] border border-[#252932] flex items-center justify-center text-xs font-semibold text-[#B8F500]">
-            <UserIcon />
+          <div className="w-8 h-8 shrink-0 rounded-full bg-[#111318] border border-[#252932] flex items-center justify-center text-xs font-semibold text-[#B8F500]">
+            {user ? user.username.charAt(0).toUpperCase() : <UserIcon className="h-4 w-4" />}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm text-[#F5F7FA] leading-none">Affan Shah</span>
-            <span className="text-xs text-[#9299A5] leading-none mt-1">demo@saturationradar.com</span>
+          <div className="flex min-w-0 flex-col">
+            <span className="truncate text-sm text-[#F5F7FA] leading-none" title={user?.username}>
+              {user?.username ?? "Account"}
+            </span>
+            <span className="mt-1 truncate text-xs text-[#9299A5] leading-none" title={user?.email}>
+              {user?.email}
+            </span>
           </div>
         </div>
 
