@@ -133,7 +133,7 @@ const ChatComponent = () => {
 
             </header>
 
-            <section ref={scrollRef} className="flex-1 space-y-6 overflow-y-scroll px-6 py-8">
+            <section ref={scrollRef} data-lenis-prevent className="flex-1 space-y-6 overflow-y-scroll px-6 py-8">
                 {messages.map((turn, idx) => (
                     <React.Fragment key={idx}>
                         <div className="flex justify-end">
