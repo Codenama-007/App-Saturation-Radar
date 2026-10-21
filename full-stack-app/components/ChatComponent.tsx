@@ -1,8 +1,13 @@
 "use client"
 import { apiFetch } from '@/lib/api'
+import { ApiError, getChat } from '@/lib/chats'
+import type { TurnOut } from '@/lib/chats'
+import { parseChatRoute } from '@/lib/chat-route'
 import { readEvents } from '@/lib/stream'
 import type { Scoring } from '@/lib/stream'
 import React, { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import { usePathname, useRouter } from 'next/navigation'
 import { SidebarTrigger } from './ui/sidebar'
 import { Input } from './ui/input'
 import { Button } from './ui/button'
@@ -11,6 +16,7 @@ import remarkGfm from 'remark-gfm'
 import MarketValidation from './MarketValidation'
 import { SystemLoader } from './SystemLoader'
 import { ButtonSpinner } from './ButtonSpinner'
+import { useChats } from './chats-context'
 
 interface Turn {
     question: string
@@ -19,7 +25,10 @@ interface Turn {
     scoring?: Scoring
     streaming: boolean
     step: string
+    unsaved?: boolean
 }
+
+type LoadState = "ready" | "loading" | "missing" | "error"
 
 // what is happening after each pipeline step finishes
 const STEP_LABELS: Record<string, string> = {
@@ -31,11 +40,90 @@ const STEP_LABELS: Record<string, string> = {
     calculate_scores: "Writing differentiators...",
 }
 
+// turns a saved question and answer into what the screen shows
+const toTurn = (t: TurnOut): Turn => ({
+    question: t.question,
+    response: t.response,
+    features: t.features,
+    scoring: Object.keys(t.scoring ?? {}).length > 0 ? t.scoring : undefined,
+    streaming: false,
+    step: "",
+})
+
 const ChatComponent = () => {
+    const pathname = usePathname()
+    const router = useRouter()
+    const { refresh } = useChats()
+
+    // /main is a new chat, /main/123 is a saved chat
+    const route = parseChatRoute(pathname)
+    const chatId = route.kind === "chat" ? route.id : null
+
     const [Message, setMessage] = useState("")
     const [messages, setMessages] = useState<Turn[]>([])
     const [streaming, setStreaming] = useState(false)
+    const [loadState, setLoadState] = useState<LoadState>(chatId === null ? "ready" : "loading")
+    // which chat the messages on screen belong to
+    const [shownId, setShownId] = useState<number | null>(chatId)
+    // a chat this screen just created, its answer is already on screen
+    const [createdId, setCreatedId] = useState<number | null>(null)
+
     const scrollRef = useRef<HTMLElement>(null)
+    const runRef = useRef(0)
+    const abortRef = useRef<AbortController | null>(null)
+
+    // the URL changed, so reset the screen in the same render to avoid showing the old chat
+    if (shownId !== chatId) {
+        setShownId(chatId)
+
+        if (chatId !== null && chatId === createdId) {
+            setCreatedId(null)
+        } else {
+            setMessages([])
+            setStreaming(false)
+            setLoadState(chatId === null ? "ready" : "loading")
+        }
+    }
+
+    const status: LoadState = route.kind === "invalid" ? "missing" : loadState
+
+    const scrollToBottom = () => {
+        requestAnimationFrame(() => {
+            const el = scrollRef.current
+            if (el) el.scrollTop = el.scrollHeight
+        })
+    }
+
+    // leaving a chat stops any answer still streaming into it
+    useEffect(() => {
+        return () => {
+            abortRef.current?.abort()
+            runRef.current += 1
+        }
+    }, [chatId])
+
+    // load the saved questions of the chat in the URL
+    useEffect(() => {
+        if (chatId === null || loadState !== "loading") return
+
+        let cancelled = false
+
+        getChat(chatId)
+            .then((chat) => {
+                if (cancelled) return
+                setMessages(chat.turns.map(toTurn))
+                setLoadState("ready")
+                scrollToBottom()
+            })
+            .catch((error) => {
+                if (cancelled) return
+                setLoadState(error instanceof ApiError && error.status === 404 ? "missing" : "error")
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [chatId, loadState])
 
     // keep following the new text, unless the user scrolled up to read
     useEffect(() => {
@@ -52,8 +140,8 @@ const ChatComponent = () => {
     const handleAnalyze = async () => {
         const question = Message
 
-        // ignore empty input and clicks while a request is running
-        if (!question.trim() || streaming) return
+        // ignore empty input, clicks while a request is running, and chats that are not loaded
+        if (!question.trim() || streaming || status !== "ready") return
 
         setMessage("")
         setStreaming(true)
@@ -61,48 +149,73 @@ const ChatComponent = () => {
             ...prev,
             { question, response: "", features: "", streaming: true, step: STEP_LABELS.start },
         ])
+        scrollToBottom()
 
-        // jump to the new question once it has rendered
-        requestAnimationFrame(() => {
-            const el = scrollRef.current
-            if (el) el.scrollTop = el.scrollHeight
-        })
+        const run = ++runRef.current
+        const controller = new AbortController()
+        abortRef.current = controller
+
+        // ignore events from a run the user has already left
+        const update = (change: (turn: Turn) => Turn) => {
+            if (runRef.current === run) updateLast(change)
+        }
 
         try {
             const response = await apiFetch('/radar/stream', {
                 method: 'POST',
-                body: JSON.stringify({ query: question }),
+                body: JSON.stringify({ query: question, chat_id: chatId }),
+                signal: controller.signal,
             })
 
             if (!response.ok) throw new Error(`Request failed: ${response.status}`)
 
             await readEvents(response, (event) => {
                 if (event.type === "step") {
-                    updateLast((t) => ({ ...t, step: STEP_LABELS[event.node] ?? t.step }))
+                    update((t) => ({ ...t, step: STEP_LABELS[event.node] ?? t.step }))
                 } else if (event.type === "token") {
-                    updateLast((t) => ({ ...t, [event.field]: t[event.field] + event.text }))
+                    update((t) => ({ ...t, [event.field]: t[event.field] + event.text }))
                 } else if (event.type === "text") {
                     // the finished text replaces what was streamed
-                    updateLast((t) => ({ ...t, [event.field]: event.text }))
+                    update((t) => ({ ...t, [event.field]: event.text }))
                 } else if (event.type === "scoring") {
-                    updateLast((t) => ({ ...t, scoring: event.data }))
+                    update((t) => ({ ...t, scoring: event.data }))
                 } else if (event.type === "error") {
-                    updateLast((t) => ({
+                    update((t) => ({
                         ...t,
                         response: t.response ? `${t.response}\n\n${event.detail}` : event.detail,
                     }))
+                } else if (event.type === "done") {
+                    update((t) => ({ ...t, streaming: false, unsaved: !event.saved }))
+
+                    if (runRef.current !== run) return
+                    setStreaming(false)
+
+                    if (event.saved && event.chat_id !== null) {
+                        // the first answer of a new chat gives it a URL, without reloading the screen
+                        if (chatId === null) {
+                            setCreatedId(event.chat_id)
+                            router.replace(`/main/${event.chat_id}`, { scroll: false })
+                        }
+
+                        refresh()
+                    }
                 }
             })
         } catch (error) {
+            // the user left this chat, so there is nothing to show
+            if (controller.signal.aborted) return
+
             console.log(error)
 
-            updateLast((t) => ({
+            update((t) => ({
                 ...t,
                 response: "Something went wrong while connecting to the backend.",
             }))
         } finally {
-            updateLast((t) => ({ ...t, streaming: false }))
-            setStreaming(false)
+            if (runRef.current === run) {
+                updateLast((t) => ({ ...t, streaming: false }))
+                setStreaming(false)
+            }
         }
     }
 
@@ -134,7 +247,36 @@ const ChatComponent = () => {
             </header>
 
             <section ref={scrollRef} data-lenis-prevent className="flex-1 space-y-6 overflow-y-scroll px-6 py-8">
-                {messages.map((turn, idx) => (
+
+                {status === "loading" && (
+                    <div className="flex items-center justify-center gap-2 py-16 text-sm text-[#8b949e]">
+                        <ButtonSpinner />
+                        Loading chat...
+                    </div>
+                )}
+
+                {status === "missing" && (
+                    <div className="py-16 text-center text-sm text-[#8b949e]">
+                        <p>This chat does not exist, or it belongs to another account.</p>
+                        <Link href="/main" className="mt-3 inline-block font-medium text-[#B8F500] hover:underline">
+                            Start a new chat
+                        </Link>
+                    </div>
+                )}
+
+                {status === "error" && (
+                    <div className="py-16 text-center text-sm text-[#8b949e]">
+                        <p>Could not load this chat.</p>
+                        <button
+                            onClick={() => setLoadState("loading")}
+                            className="mt-3 font-medium text-[#B8F500] hover:underline"
+                        >
+                            Try again
+                        </button>
+                    </div>
+                )}
+
+                {status === "ready" && messages.map((turn, idx) => (
                     <React.Fragment key={idx}>
                         <div className="flex justify-end">
                             <div className="max-w-xl rounded-lg border bg-[#B8F500] text-[#08090B] px-4 py-3 text-sm leading-relaxed">
@@ -182,6 +324,12 @@ const ChatComponent = () => {
                                     </p>
                                 )}
 
+                                {turn.unsaved && (
+                                    <p className="text-xs text-[#F59E0B]">
+                                        This answer could not be saved to your history.
+                                    </p>
+                                )}
+
                             </div>
                         </div>
 
@@ -206,7 +354,7 @@ const ChatComponent = () => {
                             shadow-none
                         "
                         value={Message}
-                        disabled={streaming}
+                        disabled={streaming || status !== "ready"}
                         onChange={(e) => {
                             setMessage(e.target.value)
                         }}
@@ -223,7 +371,7 @@ const ChatComponent = () => {
                             hover:bg-[#a3d900]
                             font-medium
                         "
-                        disabled={streaming}
+                        disabled={streaming || status !== "ready"}
                         onClick={handleAnalyze}
                     >
                         {streaming ? <ButtonSpinner /> : null}

@@ -21,7 +21,7 @@ export type StreamEvent =
   | { type: "token"; field: StreamField; text: string }
   | { type: "text"; field: StreamField; text: string }
   | { type: "scoring"; data: Scoring }
-  | { type: "done"; idea: string; from_cache: boolean }
+  | { type: "done"; idea: string; from_cache: boolean; chat_id: number | null; saved: boolean }
   | { type: "error"; detail: string }
 
 // reads newline-delimited JSON from a fetch response and calls onEvent for each line
