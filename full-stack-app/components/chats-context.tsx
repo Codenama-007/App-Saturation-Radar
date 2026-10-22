@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { deleteChat, listChats, renameChat } from "@/lib/chats"
 import type { ChatSummary } from "@/lib/chats"
+import { getToken } from "@/lib/token"
 
 type ChatsContextValue = {
   chats: ChatSummary[]
@@ -15,10 +16,18 @@ type ChatsContextValue = {
 
 const ChatsContext = createContext<ChatsContextValue | null>(null)
 
+// the last list we loaded, so opening another chat does not flash empty placeholders
+let cache: { token: string | null; chats: ChatSummary[] } = { token: null, chats: [] }
+
 // shares the chat list between the sidebar and the chat screen
 export function ChatsProvider({ children }: { children: React.ReactNode }) {
-  const [chats, setChats] = useState<ChatSummary[]>([])
-  const [loading, setLoading] = useState(true)
+  // only reuse the list when it belongs to the signed-in user
+  const [cached] = useState(() => {
+    const token = getToken()
+    return token !== null && token === cache.token ? cache.chats : null
+  })
+  const [chats, setChats] = useState<ChatSummary[]>(cached ?? [])
+  const [loading, setLoading] = useState(cached === null)
   const [error, setError] = useState("")
 
   const refresh = useCallback(async () => {
@@ -35,6 +44,10 @@ export function ChatsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  useEffect(() => {
+    if (!loading) cache = { token: getToken(), chats }
+  }, [chats, loading])
 
   const rename = useCallback(async (id: number, title: string) => {
     const updated = await renameChat(id, title)
