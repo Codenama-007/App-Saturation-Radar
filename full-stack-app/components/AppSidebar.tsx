@@ -1,9 +1,10 @@
 "use client"
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { clearSession, getUser } from '@/lib/token'
 import type { AuthUser } from '@/lib/token'
+import { parseChatRoute } from '@/lib/chat-route'
 import React from 'react'
 import Link from 'next/link';
 import {
@@ -16,19 +17,35 @@ import {
   SidebarMenuItem,
   SidebarMenu
 } from '@/components/ui/sidebar';
-import { LogOut, LogOutIcon } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton'
+import { LogOut } from 'lucide-react';
 import { UserIcon } from 'lucide-react'
 import { Plus } from 'lucide-react';
+import { useChats } from '@/components/chats-context'
+import ChatListItem from '@/components/ChatListItem'
 
 const AppSidebar = () => {
   // the sidebar only renders in the browser, so localStorage is safe to read here
   const [user] = useState<AuthUser | null>(getUser)
   const router = useRouter()
+  const pathname = usePathname()
+  const { chats, loading, error, rename, remove } = useChats()
+
+  // the chat that is open right now, if any
+  const route = parseChatRoute(pathname)
+  const activeId = route.kind === "chat" ? route.id : null
 
   // clear the saved token and go back to the login page
   const handleLogout = () => {
     clearSession()
     router.push('/login')
+  }
+
+  const handleDelete = async (id: number) => {
+    await remove(id)
+
+    // the open chat is gone, so go to a fresh one
+    if (id === activeId) router.push('/main')
   }
 
   return (
@@ -67,13 +84,14 @@ const AppSidebar = () => {
         </Link>
       </SidebarHeader>
 
-      {/* Middle section — demo project notice */}
-      <SidebarContent className="px-2 py-4">
+      {/* New chat button and the list of saved chats */}
+      <SidebarContent data-lenis-prevent className="px-2 py-4">
 
         <SidebarMenu>
           <SidebarMenuItem>
 
             <SidebarMenuButton
+              onClick={() => router.push('/main')}
               className="
                 h-10
                 border border-[#30363d]
@@ -93,9 +111,43 @@ const AppSidebar = () => {
           </SidebarMenuItem>
         </SidebarMenu>
 
+        <div className="mono-data mb-2 mt-6 px-2 text-[10px]">YOUR CHATS</div>
+
+        {loading && (
+          <div className="space-y-2 px-2" aria-label="Loading chats">
+            <Skeleton className="h-6 w-full bg-[#181B22]" />
+            <Skeleton className="h-6 w-5/6 bg-[#181B22]" />
+            <Skeleton className="h-6 w-4/6 bg-[#181B22]" />
+          </div>
+        )}
+
+        {!loading && error && (
+          <p role="alert" className="px-2 text-xs text-[var(--danger)]">{error}</p>
+        )}
+
+        {!loading && !error && chats.length === 0 && (
+          <p className="px-2 text-xs leading-relaxed text-[#9299A5]">
+            No chats yet. Ask your first question to start one.
+          </p>
+        )}
+
+        {chats.length > 0 && (
+          <SidebarMenu className="gap-1">
+            {chats.map((chat) => (
+              <ChatListItem
+                key={chat.id}
+                chat={chat}
+                active={chat.id === activeId}
+                onRename={rename}
+                onDelete={handleDelete}
+              />
+            ))}
+          </SidebarMenu>
+        )}
+
       </SidebarContent>
 
-      {/* Footer — demo user + sign up */}
+      {/* Footer — signed-in user and logout */}
       <SidebarFooter className="border-t border-[#252932] px-4 py-4">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-8 h-8 shrink-0 rounded-full bg-[#111318] border border-[#252932] flex items-center justify-center text-xs font-semibold text-[#B8F500]">
@@ -111,21 +163,13 @@ const AppSidebar = () => {
           </div>
         </div>
 
-        <Link href="/register" className="block w-full">
-          <button onClick={handleLogout} className="btn-primary w-full text-xs py-2.5 px-4 flex items-center justify-center gap-1.5">
-            <LogOut />
-            Logout
-            {/* <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path
-                d="M2 7h10M8 3l4 4-4 4"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg> */}
-          </button>
-        </Link>
+        <button
+          onClick={handleLogout}
+          className="btn-primary w-full text-xs py-2.5 px-4 flex items-center justify-center gap-1.5"
+        >
+          <LogOut />
+          Logout
+        </button>
       </SidebarFooter>
 
       <SidebarRail />

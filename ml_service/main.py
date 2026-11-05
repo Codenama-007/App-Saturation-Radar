@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from database import Base, engine, get_db
 from models import User
-from schemas import Query, LoginUser, RegisterUser, TokenOut, UserOut
+from schemas import Query, StreamQuery, LoginUser, RegisterUser, TokenOut, UserOut
 from security import (
     DUMMY_HASH,
     create_access_token,
@@ -19,6 +19,7 @@ from security import (
 from graph import graph
 from memory import init_db
 from streaming import stream_radar
+from chats import get_owned_chat, router as chats_router
  
 load_dotenv()
 
@@ -40,6 +41,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# chat history routes: list, open, rename and delete
+app.include_router(chats_router)
 
 @app.get("/")
 def home():
@@ -171,14 +175,19 @@ def app_saturation_radar(
         ),
     }
 
-# same analysis as /radar, streamed as newline-delimited JSON (login required)
+# same analysis as /radar, streamed as newline-delimited JSON and saved to a chat (login required)
 @app.post("/radar/stream")
 def app_saturation_radar_stream(
-    query : Query,
+    query : StreamQuery,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
+    # check the chat before streaming starts, so a wrong id returns a normal 404
+    if query.chat_id is not None:
+        get_owned_chat(db, query.chat_id, current_user.id)
+
     return StreamingResponse(
-        stream_radar(query.query),
+        stream_radar(query.query, current_user.id, query.chat_id),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
