@@ -6,8 +6,7 @@ requests
 ddgs
 langgraph
 langchain
-langchain_ollama
-langchain-google-genai
+langchain-groq
 email-validator
 sqlalchemy
 psycopg[binary]
