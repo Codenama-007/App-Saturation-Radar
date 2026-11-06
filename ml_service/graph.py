@@ -6,7 +6,7 @@
 import os
 import re
 from langgraph.graph import START, END, StateGraph
-from langchain_ollama import ChatOllama
+from langchain_groq import ChatGroq
 from tools import search_web_for_idea
 from schemas import AppState
 from memory import find_similar_idea, save_idea
@@ -15,22 +15,22 @@ from scoring import (
     calculate_opportunity_score,
 )
 
-# LLM (Ollama only, fully local)
-# Pick any model shown by `ollama list`, e.g.:
-#   $env:OLLAMA_MODEL="llama3.1:8b"
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
+# LLM (Groq)
+# GROQ_API_KEY must be set, GROQ_MODEL picks the model (see console.groq.com/docs/models)
+if not os.getenv("GROQ_API_KEY"):
+    raise RuntimeError("GROQ_API_KEY is not set")
 
-llm = ChatOllama(
-    model=OLLAMA_MODEL,
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+llm = ChatGroq(
+    model=GROQ_MODEL,
     temperature=0,
-    # Ollama's default context window is small. Prompts here include web
-    # search results, so a larger window avoids silent truncation.
-    num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "8192")),
-    # Local models are slow. Give each call plenty of time.
-    client_kwargs={"timeout": float(os.getenv("OLLAMA_TIMEOUT", "300"))},
+    # retries with a growing delay when Groq answers 429 (rate limit) or a 5xx error
+    max_retries=int(os.getenv("GROQ_MAX_RETRIES", "4")),
+    timeout=float(os.getenv("GROQ_TIMEOUT", "60")),
 )
 
-print(f"[llm] Ollama model: {OLLAMA_MODEL}")
+print(f"[llm] Groq model: {GROQ_MODEL}")
 
 
 # HELPERS
@@ -38,7 +38,7 @@ def content_to_text(content) -> str:
     """
     Normalize LangChain message content to a plain string.
 
-    Newer Gemini models return a list of content blocks, e.g.
+    Some models return a list of content blocks, e.g.
     [{"type": "text", "text": "..."}], instead of a string.
     Non-text blocks (thinking / reasoning) are skipped.
     """

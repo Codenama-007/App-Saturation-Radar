@@ -1,6 +1,6 @@
 import { clearSession, getToken } from "./token";
  
-const API_URL = process.env.NEXT_LIVE_API_URL;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
  
 // fetch wrapper that adds the JWT and signs the user out on a 401
 export async function apiFetch(path: string, options: RequestInit = {}) {

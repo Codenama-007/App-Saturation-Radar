@@ -18,8 +18,16 @@ def _line(event: dict) -> str:
 def _error_detail(error: Exception) -> str:
     message = str(error).lower()
 
-    if "connect" in message or "503" in message or "unavailable" in message:
-        return "The AI model is unavailable. Check that Ollama is running."
+    name = type(error).__name__.lower()
+
+    if "429" in message or "rate limit" in message or "ratelimit" in name:
+        return "The AI service is busy right now. Please try again in a moment."
+
+    if "401" in message or "invalid api key" in message or "authentication" in name:
+        return "The AI service is not set up correctly on the server."
+
+    if "connect" in message or "timeout" in message or "503" in message or "unavailable" in message:
+        return "The AI service is unavailable. Please try again shortly."
 
     return "Analysis failed. Please try again."
 
