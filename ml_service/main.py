@@ -36,7 +36,7 @@ app = FastAPI(lifespan = lifespan)
 # comma-separated frontend addresses, e.g. https://my-app.vercel.app (no trailing slash)
 ALLOWED_ORIGINS = [
     origin.strip().rstrip("/")
-    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    for origin in os.getenv("ALLOWED_ORIGINS", "https://app-saturation-radar.vercel.app").split(",")
     if origin.strip()
 ]
 
